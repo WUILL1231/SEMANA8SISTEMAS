@@ -1,0 +1,161 @@
+MYSQL
+________________________________________________________________________________
+CREATE DATABASE tienda;
+
+USE tienda;
+
+CREATE TABLE Productos (
+    producto_id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    precio DECIMAL(10, 2) NOT NULL,
+    cantidad_disponible INT NOT NULL
+);
+
+CREATE TABLE Ventas (
+    venta_id INT AUTO_INCREMENT PRIMARY KEY,
+    producto_id INT,
+    cantidad INT,
+    precio_venta DECIMAL(10, 2),
+    fecha DATE,
+    FOREIGN KEY (producto_id) REFERENCES Productos(producto_id)
+);
+
+CREATE TABLE Transacciones (
+    transaccion_id INT AUTO_INCREMENT PRIMARY KEY,
+    tipo ENUM('venta', 'ajuste') NOT NULL,
+    detalle TEXT,
+    fecha DATE
+);
+_____________________________________________________________________________________
+NETBEANS
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DatabaseConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/tienda";
+    private static final String USER = "root"; 
+    private static final String PASSWORD = "password"; 
+
+    public static Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(URL, USER, PASSWORD);
+    }
+}
+___________________________________________________________________________________________
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+public class SalesManager {
+
+    public void registrarVenta(int productoId, int cantidad, double precioVenta, java.sql.Date fecha) throws SQLException {
+        Connection conn = null;
+        PreparedStatement stmtVenta = null;
+        PreparedStatement stmtActualizarInventario = null;
+        
+        try {
+            conn = DatabaseConnection.getConnection();
+            conn.setAutoCommit(false); // Iniciar transacción
+            
+            String sqlVenta = "INSERT INTO Ventas (producto_id, cantidad, precio_venta, fecha) VALUES (?, ?, ?, ?)";
+            stmtVenta = conn.prepareStatement(sqlVenta);
+            stmtVenta.setInt(1, productoId);
+            stmtVenta.setInt(2, cantidad);
+            stmtVenta.setDouble(3, precioVenta);
+            stmtVenta.setDate(4, fecha);
+            stmtVenta.executeUpdate();
+            
+            String sqlActualizarInventario = "UPDATE Productos SET cantidad_disponible = cantidad_disponible - ? WHERE producto_id = ?";
+            stmtActualizarInventario = conn.prepareStatement(sqlActualizarInventario);
+            stmtActualizarInventario.setInt(1, cantidad);
+            stmtActualizarInventario.setInt(2, productoId);
+            int filasAfectadas = stmtActualizarInventario.executeUpdate();
+            
+            if (filasAfectadas == 0) {
+                throw new SQLException("No se pudo actualizar el inventario. Producto no encontrado.");
+            }
+            
+            conn.commit();
+        } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback(); 
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+            }
+            throw e;
+        } finally {
+            if (stmtVenta != null) stmtVenta.close();
+            if (stmtActualizarInventario != null) stmtActualizarInventario.close();
+            if (conn != null) conn.close();
+        }
+    }
+}
+______________________________________________________________________________________________________________________________
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.sql.Date;
+import java.sql.SQLException;
+
+public class SalesUI extends JFrame {
+
+    private JTextField tfProductoId;
+    private JTextField tfCantidad;
+    private JTextField tfPrecioVenta;
+    private JButton btnRegistrarVenta;
+
+    public SalesUI() {
+        setTitle("Registro de Ventas");
+        setSize(400, 300);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new GridLayout(5, 2));
+
+        add(new JLabel("ID del Producto:"));
+        tfProductoId = new JTextField();
+        add(tfProductoId);
+
+        add(new JLabel("Cantidad:"));
+        tfCantidad = new JTextField();
+        add(tfCantidad);
+
+        add(new JLabel("Precio de Venta:"));
+        tfPrecioVenta = new JTextField();
+        add(tfPrecioVenta);
+
+        add(new JLabel("Fecha (YYYY-MM-DD):"));
+        JTextField tfFecha = new JTextField();
+        add(tfFecha);
+
+        btnRegistrarVenta = new JButton("Registrar Venta");
+        add(btnRegistrarVenta);
+
+        btnRegistrarVenta.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    int productoId = Integer.parseInt(tfProductoId.getText());
+                    int cantidad = Integer.parseInt(tfCantidad.getText());
+                    double precioVenta = Double.parseDouble(tfPrecioVenta.getText());
+                    Date fecha = Date.valueOf(tfFecha.getText());
+
+                    SalesManager salesManager = new SalesManager();
+                    salesManager.registrarVenta(productoId, cantidad, precioVenta, fecha);
+                    
+                    JOptionPane.showMessageDialog(SalesUI.this, "Venta registrada exitosamente!");
+                } catch (NumberFormatException | SQLException ex) {
+                    JOptionPane.showMessageDialog(SalesUI.this, "Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new SalesUI().setVisible(true));
+    }
+}
+
