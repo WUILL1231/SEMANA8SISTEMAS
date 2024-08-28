@@ -57,7 +57,7 @@ public class SalesManager {
         
         try {
             conn = DatabaseConnection.getConnection();
-            conn.setAutoCommit(false); // Iniciar transacción
+            conn.setAutoCommit(false); 
             
             String sqlVenta = "INSERT INTO Ventas (producto_id, cantidad, precio_venta, fecha) VALUES (?, ?, ?, ?)";
             stmtVenta = conn.prepareStatement(sqlVenta);
